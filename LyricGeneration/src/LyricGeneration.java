@@ -7,6 +7,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 
 import edu.stanford.nlp.tagger.maxent.MaxentTagger;
@@ -30,6 +31,57 @@ public class LyricGeneration {
 		System.err.println(Arrays.toString(posTemplates.toArray()));
 		
 		
+		Word[] uniqueWordList = getUniqueWords(posTaggedLines);
+		Arrays.sort(uniqueWordList); // Sort by POS tag
+		
+		int[][] biGram = new int[uniqueWordList.length][uniqueWordList.length];
+		for (String ptl : posTaggedLines) {
+			String[] words = ptl.split(" ");
+			for (String word : words) {
+				Word a = new Word(word);
+			
+			}
+		}
+		
+		
+		
+		
+		
+		
+		return;
+	}
+	
+	private static int binary_search(Word[] wordList, Word word, int imin, int imax){
+	  if (imax < imin){
+		  return -1;
+	  }else{
+	      // calculate midpoint to cut set in half
+	      int imid = (imin + imax) /2;
+	      int comparison = wordList[imid].compareTo(word);
+	    		  
+	      // three-way comparison
+	      if (comparison < 0)
+	        // key is in lower subset
+	        return binary_search(wordList, word, imin, imid-1);
+	      else if (comparison > 0)
+	        // key is in upper subset
+	        return binary_search(wordList, word, imid+1, imax);
+	      else
+	        // key has been found
+	        return imid;
+	    }
+	}
+	private static Word[] getUniqueWords(ArrayList<String> posTaggedLines) {
+		HashSet<Word> wordList = new HashSet<Word>();
+		for (String taggedLine : posTaggedLines) {
+			String[] words = taggedLine.split(" ");
+			for (String word : words) {
+				wordList.add(new Word(word));
+			}
+		}
+		Word[] words = new Word[wordList.size()];
+		wordList.toArray(words);
+		return words;
 	}
 	private static ArrayList<String> createPosTemplates(ArrayList<String> posTaggedLines) {
 		ArrayList<String> posTemplates = new ArrayList<String>();
@@ -67,7 +119,7 @@ public class LyricGeneration {
 			srcline = reader.readLine();
 			while(srcline != null){
 				if(srcline.length() != 0){
-					lines.add(srcline.replaceAll("[^\\w\\s']","").replaceAll("' ", " "));
+					lines.add(srcline.replaceAll("[^\\w\\s']","").replaceAll("' ", " ").toLowerCase());
 				}
 				srcline = reader.readLine();
 			}
@@ -76,21 +128,42 @@ public class LyricGeneration {
 		}
 		return lines;
 	}
-	public LyricGeneration(){
-		
-	}
+	
 }
 
 class Word implements Comparable<Word>{
+	String original;
 	String word; 
 	String POS;
+	public Word(String word){
+		String[] tokens = word.split("_");
+		if(tokens.length != 2) throw new IllegalArgumentException();
+		original = word;
+		this.word = tokens[0];
+		this.POS = tokens[1];
+	}
+	
 	public Word(String word, String POS){
 		this.word= word; 
 		this.POS = POS;
 	}
 	@Override
 	public int compareTo(Word o) {
-		return this.POS.compareTo(o.POS);
+		return (POS+word).compareTo(o.POS + o.word);
+	}
+	@Override
+	public int hashCode() {
+		// TODO Auto-generated method stub
+		if(original == null) return (word + POS).hashCode();
+		return original.hashCode();
+	}
+	public String toString(){
+		return word + ":" + POS + " " + hashCode();
+	}
+	@Override
+	public boolean equals(Object obj) {
+		// TODO Auto-generated method stub
+		return hashCode() == obj.hashCode();
 	}
 }
 
