@@ -56,14 +56,14 @@ public class LyricGeneration {
 			int maxWord = -1;
 			for (int j = aMin; j <= aMax; j++) {
 				double newProb = bigrams[lastWordIndex][j];
-				if(newProb >= maxProb){
+				if(newProb >= maxProb){ // This gives us the last possible words very often, Devil. This needs to be done recursivly with backtracking a la prolog....
 					maxProb = bigrams[lastWordIndex][j];
 					maxWord = j;
 				}
 			}
 			lastWordIndex = maxWord;
-			System.err.print(uniqueWordList[maxWord].toString2() + " ");
-			sb.append(uniqueWordList[maxWord].toString2());
+			//System.err.print(uniqueWordList[maxWord].toString2() + " ");
+			sb.append(uniqueWordList[maxWord].toString2() + " ");
 			
 		}
 		System.out.println(sb);
