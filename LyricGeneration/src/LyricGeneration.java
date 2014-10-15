@@ -4,6 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,6 +16,7 @@ import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 
 public class LyricGeneration {
 	final static String  corpusName = "resources/corpus";
+	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB"};
 	/**
 	 * @param args
 	 */
@@ -28,11 +30,20 @@ public class LyricGeneration {
 		ArrayList<String> posTaggedLines = tagLines(lines, tagger);
 		ArrayList<String> posTemplates = createPosTemplates(posTaggedLines);
 		// Output the POS Templates
+		
 		System.err.println(Arrays.toString(posTemplates.toArray()));
 		
 		
+		
+		
 		Word[] uniqueWordList = getUniqueWords(posTaggedLines);
+		String[] POSTags = getUniquePOSTags(posTaggedLines);
+		Arrays.sort(POSTags);
 		Arrays.sort(uniqueWordList); // Sort by POS tag
+		int[] indexes = prepareIndexes(uniqueWordList, POSTags);
+		
+		
+		
 		
 		int[][] biGram = new int[uniqueWordList.length][uniqueWordList.length];
 		for (String ptl : posTaggedLines) {
@@ -50,6 +61,39 @@ public class LyricGeneration {
 		
 		return;
 	}
+	
+	private static String[] getUniquePOSTags(ArrayList<String> posTaggedLines) {
+		HashSet<String> posList = new HashSet<String>();
+		for (String taggedLine : posTaggedLines) {
+			String[] words = taggedLine.split(" ");
+			for (String word : words) {
+				String[] tokens = word.split("_");
+				if(!posList.contains(tokens[1]))posList.add(tokens[1]);
+			}
+		}
+		String[] POSTags = new String[posList.size()];
+		posList.toArray(POSTags);
+		return POSTags;
+	}
+
+	private static int[] prepareIndexes(Word[] wordList, String[] POSTags){
+		int[] indexes = new int[POSTags.length];
+		int POSTag = 0;
+		indexes[POSTag] = 0;
+		String currentPOSTag = POSTags[POSTag];
+		POSTag++;
+		for (int i = 0; i < wordList.length; i++) {
+			Word curWord = wordList[i];
+			if(!currentPOSTag.equals(curWord.POS)){
+				System.err.println("Going to next POSTAG " + currentPOSTag + " -> " + curWord.POS + " at index: " + i);
+				currentPOSTag = curWord.POS;
+				indexes[POSTag] = i;
+				POSTag++;
+			}
+		}
+		return indexes;
+	}
+	
 	
 	private static int binary_search(Word[] wordList, Word word, int imin, int imax){
 	  if (imax < imin){
@@ -149,7 +193,7 @@ class Word implements Comparable<Word>{
 	}
 	@Override
 	public int compareTo(Word o) {
-		return (POS+word).compareTo(o.POS + o.word);
+		return (POS+"_"+word).compareTo(o.POS +"_"+ o.word);
 	}
 	@Override
 	public int hashCode() {
