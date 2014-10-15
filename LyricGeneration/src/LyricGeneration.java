@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Random;
 import java.util.Set;
 
 import edu.stanford.nlp.tagger.maxent.MaxentTagger;
@@ -16,13 +17,11 @@ import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 
 public class LyricGeneration {
 	final static String  corpusName = "resources/corpus";
-	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB"};
+	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB","RS","RB"};
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		
 		
 		MaxentTagger tagger = new MaxentTagger(
 				"taggers/english-left3words-distsim.tagger");
@@ -31,39 +30,114 @@ public class LyricGeneration {
 		ArrayList<String> posTemplates = createPosTemplates(posTaggedLines);
 		// Output the POS Templates
 		
-		System.err.println(Arrays.toString(posTemplates.toArray()));
-		
-		
-		
+		//System.err.println(Arrays.toString(posTemplates.toArray()));
 		
 		Word[] uniqueWordList = getUniqueWords(posTaggedLines);
 		String[] POSTags = getUniquePOSTags(posTaggedLines);
 		Arrays.sort(POSTags);
 		Arrays.sort(uniqueWordList); // Sort by POS tag
 		int[] indexes = prepareIndexes(uniqueWordList, POSTags);
+				
+		int SOL = indexes[Arrays.binarySearch(POSTags, "SOL")];
+		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
+		
+		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
 		
 		
-		
-		
-		int[][] biGram = new int[uniqueWordList.length][uniqueWordList.length];
+		Random r = new Random();
+		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");
+		int lastWordIndex = SOL;
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < posTemplate.length; i++) {
+			int aPOSTagNr = Arrays.binarySearch(POSTags, posTemplate[i]);
+			int aMin = indexes[aPOSTagNr];
+			int aMax = indexes[aPOSTagNr != POSTags.length-1 ? aPOSTagNr +1 : POSTags.length-1];
+			double maxProb = 0;
+			int maxWord = -1;
+			for (int j = aMin; j <= aMax; j++) {
+				double newProb = bigrams[lastWordIndex][j];
+				if(newProb >= maxProb){
+					maxProb = bigrams[lastWordIndex][j];
+					maxWord = j;
+				}
+			}
+			lastWordIndex = maxWord;
+			System.err.print(uniqueWordList[maxWord].toString2() + " ");
+			sb.append(uniqueWordList[maxWord].toString2());
+			
+		}
+		System.out.println(sb);
+		return;
+	}
+
+	/**
+	 * @param posTaggedLines
+	 * @param uniqueWordList
+	 * @param POSTags
+	 * @param indexes
+	 * @param SOL
+	 * @param EOL
+	 */
+	private static double[][] calcBigrams(ArrayList<String> posTaggedLines,	Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL, int EOL) {
+		double[][] biGram = new double[uniqueWordList.length][uniqueWordList.length];
 		for (String ptl : posTaggedLines) {
 			String[] words = ptl.split(" ");
-			for (String word : words) {
-				Word a = new Word(word);
-			
+			for (int j = 0; j < words.length-1; j++) {
+				Word a = new Word(words[j]);
+				Word b = new Word(words[j+1]);
+					int aIndex = findWordIndex(uniqueWordList, POSTags, indexes, a);
+					int bIndex = findWordIndex(uniqueWordList, POSTags, indexes, b);
+
+					biGram[aIndex][bIndex]++;
+					
+					if(j==0){
+						biGram[SOL][aIndex]++;
+					}else if(j==words.length-2){
+						biGram[bIndex][EOL]++;
+					}
+				
 			}
 		}
-		
-		
-		
-		
-		
-		
-		return;
+		//Normalize rows
+		double[] sums = new double[biGram.length];
+		for (int i = 0; i < biGram.length; i++) {
+			double rowSum = 0.0;
+			for (int j = 0; j < biGram.length; j++) {
+				rowSum += biGram[i][j];
+			}
+			sums[i] = rowSum;
+			rowSum = 1/rowSum;
+			
+			for (int j = 0; j < biGram.length; j++) {
+				biGram[i][j] = biGram[i][j] * rowSum;
+				if(Double.isNaN(biGram[i][j])){
+					//System.err.println("lol2");
+				}
+			}
+		}
+		return biGram;
+	}
+
+	/**
+	 * @param uniqueWordList
+	 * @param POSTags
+	 * @param indexes
+	 * @param a
+	 * @return
+	 */
+	private static int findWordIndex(Word[] uniqueWordList, String[] POSTags,
+			int[] indexes, Word a) {
+		int aPOSTagNr = Arrays.binarySearch(POSTags, a.POS);
+		int aMin = indexes[aPOSTagNr];
+		int aMax = aPOSTagNr == POSTags.length-1 ? uniqueWordList.length : indexes[aPOSTagNr + 1 ];
+		int aIndex = binary_search(uniqueWordList, a, aMin, aMax);
+		return aIndex;
 	}
 	
 	private static String[] getUniquePOSTags(ArrayList<String> posTaggedLines) {
 		HashSet<String> posList = new HashSet<String>();
+		posList.add("SOL");
+		posList.add("EOL");
 		for (String taggedLine : posTaggedLines) {
 			String[] words = taggedLine.split(" ");
 			for (String word : words) {
@@ -75,7 +149,12 @@ public class LyricGeneration {
 		posList.toArray(POSTags);
 		return POSTags;
 	}
-
+	/**
+	 * 
+	 * @param wordList
+	 * @param POSTags
+	 * @return
+	 */
 	private static int[] prepareIndexes(Word[] wordList, String[] POSTags){
 		int[] indexes = new int[POSTags.length];
 		int POSTag = 0;
@@ -85,7 +164,7 @@ public class LyricGeneration {
 		for (int i = 0; i < wordList.length; i++) {
 			Word curWord = wordList[i];
 			if(!currentPOSTag.equals(curWord.POS)){
-				System.err.println("Going to next POSTAG " + currentPOSTag + " -> " + curWord.POS + " at index: " + i);
+				//System.err.println("Going to next POSTAG " + currentPOSTag + " -> " + curWord.POS + " at index: " + i);
 				currentPOSTag = curWord.POS;
 				indexes[POSTag] = i;
 				POSTag++;
@@ -104,10 +183,10 @@ public class LyricGeneration {
 	      int comparison = wordList[imid].compareTo(word);
 	    		  
 	      // three-way comparison
-	      if (comparison < 0)
+	      if (comparison > 0)
 	        // key is in lower subset
 	        return binary_search(wordList, word, imin, imid-1);
-	      else if (comparison > 0)
+	      else if (comparison < 0)
 	        // key is in upper subset
 	        return binary_search(wordList, word, imid+1, imax);
 	      else
@@ -123,6 +202,8 @@ public class LyricGeneration {
 				wordList.add(new Word(word));
 			}
 		}
+		wordList.add(new Word("SOL","SOL"));
+		wordList.add(new Word("EOL","EOL"));
 		Word[] words = new Word[wordList.size()];
 		wordList.toArray(words);
 		return words;
@@ -163,7 +244,7 @@ public class LyricGeneration {
 			srcline = reader.readLine();
 			while(srcline != null){
 				if(srcline.length() != 0){
-					lines.add(srcline.replaceAll("[^\\w\\s']","").replaceAll("' ", " ").toLowerCase());
+					lines.add(srcline.replaceAll("[^\\w\\s']","").replaceAll("'", " ").replaceAll("'\\n","").toLowerCase());
 				}
 				srcline = reader.readLine();
 			}
@@ -182,18 +263,26 @@ class Word implements Comparable<Word>{
 	public Word(String word){
 		String[] tokens = word.split("_");
 		if(tokens.length != 2) throw new IllegalArgumentException();
+		if(tokens[0].equals("'")){
+			System.err.println("lol");
+		}
 		original = word;
 		this.word = tokens[0];
 		this.POS = tokens[1];
 	}
 	
+	public Object toString2() {
+		// TODO Auto-generated method stub
+		return word;
+	}
+
 	public Word(String word, String POS){
 		this.word= word; 
 		this.POS = POS;
 	}
 	@Override
 	public int compareTo(Word o) {
-		return (POS+"_"+word).compareTo(o.POS +"_"+ o.word);
+		return (POS+" "+word).compareTo(o.POS +" "+ o.word);
 	}
 	@Override
 	public int hashCode() {
