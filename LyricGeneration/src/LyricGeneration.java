@@ -45,7 +45,7 @@ public class LyricGeneration {
 		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
 		
 		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
-		double[][][] trigrams = calcTrigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
+		byte[][][] trigrams = calcTrigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
 		String verserow = synthesizeRowTriGram(posTemplates, uniqueWordList, POSTags,indexes, SOL, trigrams);
 		System.out.println(verserow);
 		/*
@@ -79,10 +79,10 @@ public class LyricGeneration {
 		return;
 	}
 
-	private static double[][][] calcTrigrams(ArrayList<String> posTaggedLines,
+	private static byte[][][] calcTrigrams(ArrayList<String> posTaggedLines,
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
 			int EOL) {
-		double[][][] triGram = new double[uniqueWordList.length][uniqueWordList.length][uniqueWordList.length];
+		byte[][][] triGram = new byte[uniqueWordList.length][uniqueWordList.length][uniqueWordList.length];
 		for (String ptl : posTaggedLines) {
 			String[] words = ptl.split(" ");
 			for (int j = 0; j < words.length-2; j++) {
@@ -97,8 +97,7 @@ public class LyricGeneration {
 					
 					if(j==0){
 						triGram[SOL][SOL][aIndex]++;
-					}
-					else if(j==1){
+					}else if(j==1){
 							triGram[SOL][aIndex][bIndex]++;
 					}else if(j==words.length-2){
 						triGram[bIndex][cIndex][EOL]++;
@@ -109,7 +108,8 @@ public class LyricGeneration {
 			}
 		}
 		//Normalize rows
-		double[][] sums = new double[triGram.length][triGram.length];
+		/*
+		byte[][] sums = new double[triGram.length][triGram.length];
 		for (int i = 0; i < triGram.length; i++) {
 			for (int j = 0; j < triGram.length; j++) {
 				double rowSum = 0.0;
@@ -126,7 +126,7 @@ public class LyricGeneration {
 					}
 				}
 			}
-		}
+		}*/
 		return triGram;
 	}
 
@@ -186,7 +186,7 @@ public class LyricGeneration {
 	}
 	private static String synthesizeRowTriGram(ArrayList<String> posTemplates,
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
-			double[][][] trigrams) {
+			byte[][][] trigrams) {
 			Random r = new Random();
 			String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
 			//System.out.println(Arrays.toString(posTemplate));
@@ -202,7 +202,7 @@ public class LyricGeneration {
 		}
 	
 	private static ArrayList<Integer> getNextWordTriGram(String[] posTemplate, int indexOfPT, 
-			double[][][] trigrams, int prevPrevWord, int prevWord,  String[] POSTags, int[] indexes) {
+			byte[][][] trigrams, int prevPrevWord, int prevWord,  String[] POSTags, int[] indexes) {
 		if(indexOfPT == posTemplate.length){
 			return new ArrayList<Integer>();
 		}
