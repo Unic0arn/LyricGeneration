@@ -45,7 +45,10 @@ public class LyricGeneration {
 		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
 		
 		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
-		
+		double[][][] trigrams = calcTrigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
+		String verserow = synthesizeRowTriGram(posTemplates, uniqueWordList, POSTags,indexes, SOL, trigrams);
+		System.out.println(verserow);
+		/*
 		for (int i = 0; i < 4; i++) {
 			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
 			System.out.println(verserow);
@@ -72,8 +75,59 @@ public class LyricGeneration {
 		}
 		
 		
-		
+		*/
 		return;
+	}
+
+	private static double[][][] calcTrigrams(ArrayList<String> posTaggedLines,
+			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
+			int EOL) {
+		double[][][] triGram = new double[uniqueWordList.length][uniqueWordList.length][uniqueWordList.length];
+		for (String ptl : posTaggedLines) {
+			String[] words = ptl.split(" ");
+			for (int j = 0; j < words.length-2; j++) {
+				Word a = new Word(words[j]);
+				Word b = new Word(words[j+1]);
+				Word c = new Word(words[j+2]);
+					int aIndex = findWordIndex(uniqueWordList, POSTags, indexes, a);
+					int bIndex = findWordIndex(uniqueWordList, POSTags, indexes, b);
+					int cIndex = findWordIndex(uniqueWordList, POSTags, indexes, c);
+
+					triGram[aIndex][bIndex][cIndex]++;
+					
+					if(j==0){
+						triGram[SOL][SOL][aIndex]++;
+					}
+					else if(j==1){
+							triGram[SOL][aIndex][bIndex]++;
+					}else if(j==words.length-2){
+						triGram[bIndex][cIndex][EOL]++;
+					}else if(j==words.length-2){
+						triGram[cIndex][EOL][EOL]++;
+					}
+				
+			}
+		}
+		//Normalize rows
+		double[][] sums = new double[triGram.length][triGram.length];
+		for (int i = 0; i < triGram.length; i++) {
+			for (int j = 0; j < triGram.length; j++) {
+				double rowSum = 0.0;
+				for (int k = 0; k < triGram.length; k++) {
+					rowSum += triGram[i][j][k];
+				}
+
+				sums[i][j] = rowSum;
+				rowSum = 1/rowSum;
+				for (int k = 0; k < triGram.length; k++) {
+					triGram[i][j][k] = triGram[i][j][k] * rowSum;
+					if(Double.isNaN(triGram[i][j][k])){
+						System.err.println("lol2");
+					}
+				}
+			}
+		}
+		return triGram;
 	}
 
 	/**
@@ -94,7 +148,10 @@ public class LyricGeneration {
 		StringBuilder sb = new StringBuilder();
 		int indexOfPT = 0;
 		int prevWord = SOL; 
-		ArrayList<Integer> row = getNextWord(posTemplate , indexOfPT, bigrams, prevWord, POSTags, indexes);
+		ArrayList<Integer> row = new ArrayList<Integer>();
+		
+			row = getNextWord(posTemplate , indexOfPT, bigrams, prevWord, POSTags, indexes);
+		
 		
 		for (int i = row.size(); i > 0; i--) {			
 			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
@@ -104,29 +161,70 @@ public class LyricGeneration {
 	
 	}
 
-private static ArrayList<Integer> getNextWord(String[] posTemplate, int indexOfPT, double[][] bigrams, int prevWord, String[] POSTags, int[] indexes) {
-	if(indexOfPT == posTemplate.length){
-		return new ArrayList<Integer>();
-	}
-	int aPOSTagNr = Arrays.binarySearch(POSTags, posTemplate[indexOfPT]);
-	int aMin = indexes[aPOSTagNr];
-	int aMax = indexes[aPOSTagNr != POSTags.length-1 ? aPOSTagNr +1 : POSTags.length-1];
-	WordProb[] flwWordProbs = new WordProb[aMax-aMin];
-	for (int i = aMin; i < aMax; i++) {
-		flwWordProbs[i-aMin] = new WordProb(bigrams[prevWord][i], i);
-	}
-	Arrays.sort(flwWordProbs);
-	for (int i = 0; i < flwWordProbs.length; i++) {
-		ArrayList<Integer> nextWordindex = getNextWord(posTemplate, indexOfPT+1, bigrams, flwWordProbs[i].index, POSTags, indexes);
-		if(nextWordindex == null){
-			continue;
-		}else{
-			nextWordindex.add(flwWordProbs[i].index);
-			return nextWordindex;
+	private static ArrayList<Integer> getNextWord(String[] posTemplate, int indexOfPT, double[][] bigrams, int prevWord, String[] POSTags, int[] indexes) {
+		if(indexOfPT == posTemplate.length){
+			return new ArrayList<Integer>();
 		}
+		int aPOSTagNr = Arrays.binarySearch(POSTags, posTemplate[indexOfPT]);
+		int aMin = indexes[aPOSTagNr];
+		int aMax = indexes[aPOSTagNr != POSTags.length-1 ? aPOSTagNr +1 : POSTags.length-1];
+		WordProb[] flwWordProbs = new WordProb[aMax-aMin];
+		for (int i = aMin; i < aMax; i++) {
+			flwWordProbs[i-aMin] = new WordProb(bigrams[prevWord][i], i);
+		}
+		Arrays.sort(flwWordProbs);
+		for (int i = 0; i < flwWordProbs.length; i++) {
+			ArrayList<Integer> nextWordindex = getNextWord(posTemplate, indexOfPT+1, bigrams, flwWordProbs[i].index, POSTags, indexes);
+			if(nextWordindex == null){
+				continue;
+			}else{
+				nextWordindex.add(flwWordProbs[i].index);
+				return nextWordindex;
+			}
+		}
+		return null;
 	}
-	return null;
-}
+	private static String synthesizeRowTriGram(ArrayList<String> posTemplates,
+			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
+			double[][][] trigrams) {
+			Random r = new Random();
+			String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
+			//System.out.println(Arrays.toString(posTemplate));
+			StringBuilder sb = new StringBuilder();
+			int indexOfPT = 0;
+			int prevWord = SOL; 
+			ArrayList<Integer> row = new ArrayList<Integer>();
+			row = getNextWordTriGram(posTemplate , indexOfPT, trigrams, prevWord,prevWord, POSTags, indexes);
+			for (int i = row.size(); i > 0; i--) {			
+				sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
+			}			
+			return sb.toString();
+		}
+	
+	private static ArrayList<Integer> getNextWordTriGram(String[] posTemplate, int indexOfPT, 
+			double[][][] trigrams, int prevPrevWord, int prevWord,  String[] POSTags, int[] indexes) {
+		if(indexOfPT == posTemplate.length){
+			return new ArrayList<Integer>();
+		}
+		int aPOSTagNr = Arrays.binarySearch(POSTags, posTemplate[indexOfPT]);
+		int aMin = indexes[aPOSTagNr];
+		int aMax = indexes[aPOSTagNr != POSTags.length-1 ? aPOSTagNr +1 : POSTags.length-1];
+		WordProb[] flwWordProbs = new WordProb[aMax-aMin];
+		for (int i = aMin; i < aMax; i++) {
+			flwWordProbs[i-aMin] = new WordProb(trigrams[prevPrevWord][prevWord][i], i);
+		}
+		Arrays.sort(flwWordProbs);
+		for (int i = 0; i < flwWordProbs.length; i++) {
+			ArrayList<Integer> nextWordindex = getNextWordTriGram(posTemplate, indexOfPT+1, trigrams,prevWord , flwWordProbs[i].index, POSTags, indexes);
+			if(nextWordindex == null){
+				continue;
+			}else{
+				nextWordindex.add(flwWordProbs[i].index);
+				return nextWordindex;
+			}
+		}
+		return null;
+	}
 
 	/**
 	 * @param posTaggedLines
