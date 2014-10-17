@@ -36,6 +36,9 @@ public class LyricGeneration {
 		String[] POSTags = getUniquePOSTags(posTaggedLines);
 		Arrays.sort(POSTags);
 		Arrays.sort(uniqueWordList); // Sort by POS tag
+		/*for (int i = 0; i < uniqueWordList.length; i++) {
+			System.out.println(i + " "+ uniqueWordList[i].word +" : " + uniqueWordList[i].POS );			
+		}*/
 		int[] indexes = prepareIndexes(uniqueWordList, POSTags);
 				
 		int SOL = indexes[Arrays.binarySearch(POSTags, "SOL")];
@@ -43,32 +46,87 @@ public class LyricGeneration {
 		
 		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
 		
-		
-		Random r = new Random();
-		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");
-		int lastWordIndex = SOL;
-		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < posTemplate.length; i++) {
-			int aPOSTagNr = Arrays.binarySearch(POSTags, posTemplate[i]);
-			int aMin = indexes[aPOSTagNr];
-			int aMax = indexes[aPOSTagNr != POSTags.length-1 ? aPOSTagNr +1 : POSTags.length-1];
-			double maxProb = 0;
-			int maxWord = -1;
-			for (int j = aMin; j <= aMax; j++) {
-				double newProb = bigrams[lastWordIndex][j];
-				if(newProb >= maxProb){ // This gives us the last possible words very often, Devil. This needs to be done recursivly with backtracking a la prolog....
-					maxProb = bigrams[lastWordIndex][j];
-					maxWord = j;
-				}
-			}
-			lastWordIndex = maxWord;
-			//System.err.print(uniqueWordList[maxWord].toString2() + " ");
-			sb.append(uniqueWordList[maxWord].toString2() + " ");
-			
+		for (int i = 0; i < 4; i++) {
+			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			System.out.println(verserow);
 		}
-		System.out.println(sb);
+		System.out.println("");
+		for (int i = 0; i < 4; i++) {
+			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			System.out.println(verserow);
+		}
+		System.out.println("");
+		for (int i = 0; i < 3; i++) {
+			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			System.out.println(verserow);
+		}
+		System.out.println("");
+		for (int i = 0; i < 4; i++) {
+			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			System.out.println(verserow);
+		}
+		System.out.println("");
+		for (int i = 0; i < 4; i++) {
+			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			System.out.println(verserow);
+		}
+		
+		
+		
 		return;
 	}
+
+	/**
+	 * @param posTemplates
+	 * @param uniqueWordList
+	 * @param POSTags
+	 * @param indexes
+	 * @param SOL
+	 * @param bigrams
+	 * @return
+	 */
+	private static String synthesizeRow(ArrayList<String> posTemplates,
+		Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
+		double[][] bigrams) {
+		Random r = new Random();
+		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
+		//System.out.println(Arrays.toString(posTemplate));
+		StringBuilder sb = new StringBuilder();
+		int indexOfPT = 0;
+		int prevWord = SOL; 
+		ArrayList<Integer> row = getNextWord(posTemplate , indexOfPT, bigrams, prevWord, POSTags, indexes);
+		
+		for (int i = row.size(); i > 0; i--) {			
+			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
+		}			
+		
+		return sb.toString();
+	
+	}
+
+private static ArrayList<Integer> getNextWord(String[] posTemplate, int indexOfPT, double[][] bigrams, int prevWord, String[] POSTags, int[] indexes) {
+	if(indexOfPT == posTemplate.length){
+		return new ArrayList<Integer>();
+	}
+	int aPOSTagNr = Arrays.binarySearch(POSTags, posTemplate[indexOfPT]);
+	int aMin = indexes[aPOSTagNr];
+	int aMax = indexes[aPOSTagNr != POSTags.length-1 ? aPOSTagNr +1 : POSTags.length-1];
+	WordProb[] flwWordProbs = new WordProb[aMax-aMin];
+	for (int i = aMin; i < aMax; i++) {
+		flwWordProbs[i-aMin] = new WordProb(bigrams[prevWord][i], i);
+	}
+	Arrays.sort(flwWordProbs);
+	for (int i = 0; i < flwWordProbs.length; i++) {
+		ArrayList<Integer> nextWordindex = getNextWord(posTemplate, indexOfPT+1, bigrams, flwWordProbs[i].index, POSTags, indexes);
+		if(nextWordindex == null){
+			continue;
+		}else{
+			nextWordindex.add(flwWordProbs[i].index);
+			return nextWordindex;
+		}
+	}
+	return null;
+}
 
 	/**
 	 * @param posTaggedLines
@@ -254,6 +312,27 @@ public class LyricGeneration {
 		return lines;
 	}
 	
+}
+class WordProb implements Comparable<WordProb>{
+
+	double prob;
+	int index;
+	public WordProb(double prob, int index) {
+		super();
+		this.prob = prob;
+		this.index = index;
+	}
+	@Override
+	public int compareTo(WordProb o) {
+		// TODO Auto-generated method stub
+		return Double.compare(o.prob, prob);
+	}
+	
+	@Override
+	public String toString(){
+		return index + " : " + prob ;
+	}
+
 }
 
 class Word implements Comparable<Word>{
