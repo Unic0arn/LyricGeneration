@@ -274,7 +274,7 @@ public class LyricGeneration {
 
 			for (int j = 0; j < biGram.length; j++) {
 				biGram[i][j] = biGram[i][j] * rowSum;
-				if(debug && i != 22 && Double.isNaN(biGram[i][j])){
+				if(debug && Double.isNaN(biGram[i][j])){
 					System.err.println("Nan found");
 				}
 			}
