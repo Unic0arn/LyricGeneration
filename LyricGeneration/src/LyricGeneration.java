@@ -229,6 +229,7 @@ public class LyricGeneration {
 		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");			
 		
 		if(debug)System.out.println(Arrays.toString(posTemplate));
+		System.out.println(Arrays.toString(posTemplate));
 		StringBuilder sb = new StringBuilder();
 		int indexOfPT = 0;
 		int prevWord = SOL;
