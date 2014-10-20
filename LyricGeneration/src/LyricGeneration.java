@@ -21,7 +21,7 @@ public class LyricGeneration {
 	private static final int PDT = 15;
 	private static final int VB = 26;
 	private static final int WDT = 32;
-	private static final String VNname = "resources/vn";
+	private static final String VNname = "resources/vn2";
 
 	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB","RS","RB"};
 	/**
@@ -96,8 +96,9 @@ public class LyricGeneration {
 		int lastVB;
 		Arrays.sort(flwWordProbs);
 		
-		//should perhaps try to randomize forst word in a row
-		
+		if(indexOfPT == 0){
+			flwWordProbs = randomOrder(flwWordProbs);
+		}
 		for (int i = 0; i < flwWordProbs.length; i++) {
 			//if verb was previously cleared and backtracked, set it as prevVB again
 			lastVB = prevVB;
