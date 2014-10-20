@@ -1,6 +1,16 @@
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,14 +24,17 @@ import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 
 
 public class LyricGeneration {
-	final static String  corpusName = "resources/U2corpus";
+
+	private static final String corpusType = "U2";
+	private static String  corpusName = "resources/"+corpusType+"corpus";
+	private static String  relDBfile = "resources/"+corpusType+"reldb";
 	private static final boolean debug = false;
 	private static final int nrDublicatedPosTemplates = 2;
 	private static final int NN = 12;
 	private static final int PDT = 15;
 	private static final int VB = 26;
 	private static final int WDT = 32;
-	private static final String VNname = "resources/vn2";
+	private static final String VNname = "resources/vn";
 
 	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB","RS","RB"};
 	/**
@@ -54,25 +67,26 @@ public class LyricGeneration {
 		int verbsEnd = indexes[Arrays.binarySearch(POSTags, "WDT")];
 		int nounStart = indexes[Arrays.binarySearch(POSTags, "NN")];
 		int nounEnd =  indexes[Arrays.binarySearch(POSTags, "PDT")];		
-		boolean[][] vbNNrelation = readRelations(tagger, uniqueWordList,verbsStart, verbsEnd, nounStart, nounEnd);
+		boolean[][] vbNNrelation = readRelations(tagger, uniqueWordList,verbsStart, verbsEnd, nounStart, nounEnd);		
+
 		//get start of line and end of line
 		int SOL = indexes[Arrays.binarySearch(POSTags, "SOL")];
 		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
-		
-		
-		
+
+
+
 		//print statistics
 		System.out.println("number of postagged lines in corpus: " + posTaggedLines.size());
 		System.out.println("number of unique words in corpus: " + uniqueWordList.length);
 		System.out.println("number postagTemplates: " + posTemplates.size());		
-		
-		
+
+
 		// for bigrams:
 		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
 		for (int i = 0; i < 5; i++) {
 			synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams, vbNNrelation);
 		}
-		
+
 
 		//for trigrams:
 		//byte[][][] trigrams = calcTrigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
@@ -95,7 +109,7 @@ public class LyricGeneration {
 		}
 		int lastVB;
 		Arrays.sort(flwWordProbs);
-		
+
 		if(indexOfPT == 0){
 			flwWordProbs = randomOrder(flwWordProbs);
 		}
@@ -120,7 +134,7 @@ public class LyricGeneration {
 					//and they are not compatible - continue with loop.
 					if(!vbNNrelation[prevVB][flwWordProbs[i].index]){
 						continue;		
-				}
+					}
 					//it passed the check, set verb as cleared
 					lastVB =-1;
 				}
@@ -142,40 +156,47 @@ public class LyricGeneration {
 		boolean[][] vbNNrelation = new boolean[uniqueWordList.length][uniqueWordList.length];
 		BufferedReader reader;
 		ArrayList<String> taggedLines = new ArrayList<String>();
-		String srcline;		 
-		try {
-			reader = new BufferedReader(new InputStreamReader(new FileInputStream(VNname), "ISO-8859-1"));
-			srcline = reader.readLine();
-			while(srcline != null){
-				if(srcline.length() != 0){
-					taggedLines.add(tagger.tagString(srcline));					
-				}
+		String srcline;		
+		try {			
+			ObjectInputStream deserializer = new ObjectInputStream(new FileInputStream(relDBfile));
+			vbNNrelation = (boolean[][]) deserializer.readObject();
+			deserializer.close();
+		}catch (FileNotFoundException e){
+			try {			
+				reader = new BufferedReader(new InputStreamReader(new FileInputStream(VNname), "ISO-8859-1"));
 				srcline = reader.readLine();
-			}
-			reader.close();
-			int nrOFrels = 0;
-			for (String taggedLine : taggedLines) {
-				String[] vbNN = taggedLine.split(" ");
-				int vbindex = binary_search(uniqueWordList, new Word(vbNN[0]), vbStart, vbEnd);
-				//if word is in corpus / uniqueWordList
-				if(vbindex > 0){
-					int nnindex = binary_search(uniqueWordList, new Word(vbNN[1]), nnStart, nnEnd);
-					//if noun is also in corpus / unique wordlist
-					if(nnindex > 0){
-						nrOFrels++;						
-						vbNNrelation[vbindex][nnindex] = true;						
+				while(srcline != null){
+					if(srcline.length() != 0){
+						taggedLines.add(tagger.tagString(srcline));					
+					}
+					srcline = reader.readLine();
+				}
+				reader.close();
+				int nrOFrels = 0;
+				for (String taggedLine : taggedLines) {
+					String[] vbNN = taggedLine.split(" ");
+					int vbindex = binary_search(uniqueWordList, new Word(vbNN[0]), vbStart, vbEnd);
+					//if word is in corpus / uniqueWordList
+					if(vbindex > 0){
+						int nnindex = binary_search(uniqueWordList, new Word(vbNN[1]), nnStart, nnEnd);
+						//if noun is also in corpus / unique wordlist
+						if(nnindex > 0){
+							nrOFrels++;						
+							vbNNrelation[vbindex][nnindex] = true;						
+						}
 					}
 				}
+				
+				
+				ObjectOutputStream serializer = new ObjectOutputStream(new FileOutputStream(new File(relDBfile)));
+				serializer.writeObject(vbNNrelation);	
+				serializer.close();
+				System.err.println("number of relations in corpus: " + nrOFrels);
+			} catch (Exception e2) {
+				e2.printStackTrace();
 			}
-			System.err.println("number of relations in corpus: " + nrOFrels);
-
-
-			//int index = binary_search(uniqueWordList, new Word(), verbsStart, verbsEnd);
-
-
-
-		} catch (Exception e) {
-			e.printStackTrace();
+		}catch (Exception e3){			
+			e3.printStackTrace();
 		}
 
 
@@ -226,9 +247,9 @@ public class LyricGeneration {
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
 			double[][] bigrams,boolean[][] vbNNrelation) {
 		Random r = new Random();
-		
+
 		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");			
-		
+
 		if(debug)System.out.println(Arrays.toString(posTemplate));
 		System.out.println(Arrays.toString(posTemplate));
 		StringBuilder sb = new StringBuilder();
@@ -237,11 +258,11 @@ public class LyricGeneration {
 		int prevVB = -1;
 		ArrayList<Integer> row = new ArrayList<Integer>();
 		ArrayList<Integer> rowSem = new ArrayList<Integer>();
-		
+
 		row = getNextWord(posTemplate , indexOfPT, bigrams, prevWord, POSTags, indexes);
-		
+
 		rowSem = getNextWordSemantic(posTemplate , indexOfPT, bigrams, prevWord, prevVB, POSTags, indexes, vbNNrelation);
-		
+
 		if(rowSem == null){			
 			return "unable to produce row for POS-template " + Arrays.toString(posTemplate);
 		}
@@ -250,14 +271,14 @@ public class LyricGeneration {
 			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
 		}
 		System.out.println(sb);
-		
+
 		System.out.println("With semantics:");
 		sb = new StringBuilder();
 		for (int i = rowSem.size(); i > 0; i--) {			
 			sb.append(uniqueWordList[rowSem.get(i-1)].toString2()+" ");			
 		}
 		System.out.println(sb);
-		
+
 		return sb.toString();
 
 	}
@@ -277,7 +298,7 @@ public class LyricGeneration {
 		if(indexOfPT == 0){
 			flwWordProbs = randomOrder(flwWordProbs);
 		}
-		
+
 		for (int i = 0; i < flwWordProbs.length; i++) {
 
 			if(flwWordProbs[i].prob == 0.0){
@@ -296,9 +317,9 @@ public class LyricGeneration {
 		}
 		return null;
 	}
-	
-	
-	
+
+
+
 	private static WordProb[] randomOrder(WordProb[] flwWordProbs) {		
 		ArrayList<WordProb> temp = new ArrayList<WordProb>();
 		for(int i = 0; i<flwWordProbs.length; i++){
@@ -308,15 +329,15 @@ public class LyricGeneration {
 			temp.add(flwWordProbs[i]);			
 		}		
 		Collections.shuffle(temp);
-		
+
 		WordProb[] flwWordProbsres = new WordProb[temp.size()];
 		for (int i = 0; i < flwWordProbsres.length; i++) {			
 			flwWordProbsres[i] = temp.get(i);
 		}
-		
+
 		return flwWordProbsres;
 	}
-	
+
 
 	private static String synthesizeRowTriGram(ArrayList<String> posTemplates,
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
