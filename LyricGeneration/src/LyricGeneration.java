@@ -12,9 +12,9 @@ import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 
 
 public class LyricGeneration {
-	final static String  corpusName = "resources/U2corpus";
+	final static String  corpusName = "resources/corpus";
 	private static final boolean debug = false;
-	private static final int nrDublicatedPosTemplates = 3;
+	private static final int nrDublicatedPosTemplates = 6;
 	private static final int NN = 12;
 	private static final int PDT = 15;
 	private static final int VB = 26;
@@ -57,80 +57,29 @@ public class LyricGeneration {
 		//get start of line and end of line
 		int SOL = indexes[Arrays.binarySearch(POSTags, "SOL")];
 		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
-
+		
+		
+		
+		//print statistics
+		System.out.println("number of postagged lines in corpus: " + posTaggedLines.size());
+		System.out.println("number of unique words in corpus: " + uniqueWordList.length);
+		System.out.println("number postagTemplates: " + posTemplates.size());		
+		
+		
 		// for bigrams:
-		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);		
-		//String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams, vbNNrelation);
+		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
+		for (int i = 0; i < 5; i++) {
+			synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams, vbNNrelation);
+		}
+		
 
 		//for trigrams:
 		//byte[][][] trigrams = calcTrigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
 		//String verserow = synthesizeRowTriGram(posTemplates, uniqueWordList, POSTags,indexes, SOL, trigrams);
 
 
-		System.out.println("number of postagged lines in corpus: " + posTaggedLines.size());
-		System.out.println("number of unique words in corpus: " + uniqueWordList.length);
-		System.out.println("number postagTemplates: " + posTemplates.size());
-		//System.out.println(verserow);
-
-		//for generating whole song:
-		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
-			System.out.println(verserow);
-		}
-		System.out.println("");
-		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
-			System.out.println(verserow);
-		}
-		System.out.println("");
-		for (int i = 0; i < 3; i++) {
-			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
-			System.out.println(verserow);
-		}
-		System.out.println("");
-		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
-			System.out.println(verserow);
-		}
-		System.out.println("");
-		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
-			System.out.println(verserow);
-		}
-
-
-
 		return;
 	}
-
-	private static String synthesizeRowSemantic(ArrayList<String> posTemplates,
-			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
-			double[][] bigrams, boolean[][] vbNNrelation) {
-		Random r = new Random();
-		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
-		if(debug)System.out.println(Arrays.toString(posTemplate));
-		StringBuilder sb = new StringBuilder();
-		int indexOfPT = 0;
-		int prevWord = SOL;
-		int prevVB = -1;
-		ArrayList<Integer> row = new ArrayList<Integer>();
-
-		row = getNextWordSemantic(posTemplate , indexOfPT, bigrams, prevWord, prevVB, POSTags, indexes, vbNNrelation);
-
-		//if no match against template (should not happen)
-		if(row == null){
-			synthesizeRow(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams);
-			return "";
-		}
-		
-		for (int i = row.size(); i > 0; i--) {			
-			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
-		}			
-
-		return sb.toString();
-
-	}
-
 
 	private static ArrayList<Integer> getNextWordSemantic(String[] posTemplate,	int indexOfPT, double[][] bigrams, int prevWord, int prevVB, String[] pOSTags, int[] indexes, boolean[][] vbNNrelation) {
 		if(indexOfPT == posTemplate.length){
@@ -143,8 +92,13 @@ public class LyricGeneration {
 		for (int i = aMin; i < aMax; i++) {
 			flwWordProbs[i-aMin] = new WordProb(bigrams[prevWord][i], i);
 		}
+		int lastVB;
 		Arrays.sort(flwWordProbs);
-		for (int i = 0; i < flwWordProbs.length; i++) {			
+		
+		//should perhaps try to randomize forst word in a row
+		
+		for (int i = 0; i < flwWordProbs.length; i++) {	
+			lastVB = prevVB;
 			if(flwWordProbs[i].prob == 0.0){
 				//if no chance of word - break (since array is sorted)
 				break;
@@ -152,19 +106,23 @@ public class LyricGeneration {
 			if(debug)System.err.println("index of POStemplate = " + indexOfPT + " trying with word: "+flwWordProbs[i].index + " with prob: " + flwWordProbs[i].prob);
 
 			//if current postag is a verb, mark it.
-			if(aPOSTagNr >= VB && aPOSTagNr <= WDT){
+			if(aPOSTagNr >= VB && aPOSTagNr < WDT){
 				prevVB = flwWordProbs[i].index;
 			}
 
 			//if current posTag is NN
-			if(aPOSTagNr >= NN && aPOSTagNr <= PDT){
+			if(aPOSTagNr >= NN && aPOSTagNr < PDT){
 				//and if a previous verb is marked and they are not compatible - continue with loop.
-				if(prevVB > 0 && !vbNNrelation[prevVB][flwWordProbs[i].index]){
-					continue;						
+				if(lastVB > 0){
+					if(!vbNNrelation[prevVB][flwWordProbs[i].index]){
+						continue;		
+				}
+					//it passed the check, set verb as cleared
+					lastVB =-1;
 				}
 			}
 
-			ArrayList<Integer> nextWordindex = getNextWordSemantic(posTemplate, indexOfPT+1, bigrams, flwWordProbs[i].index, prevVB, pOSTags, indexes, vbNNrelation);
+			ArrayList<Integer> nextWordindex = getNextWordSemantic(posTemplate, indexOfPT+1, bigrams, flwWordProbs[i].index, lastVB, pOSTags, indexes, vbNNrelation);
 			if(nextWordindex == null){
 				continue;
 			}else{
@@ -262,21 +220,37 @@ public class LyricGeneration {
 	 */
 	private static String synthesizeRow(ArrayList<String> posTemplates,
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
-			double[][] bigrams) {
+			double[][] bigrams,boolean[][] vbNNrelation) {
 		Random r = new Random();
 		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
 		if(debug)System.out.println(Arrays.toString(posTemplate));
 		StringBuilder sb = new StringBuilder();
 		int indexOfPT = 0;
-		int prevWord = SOL; 
+		int prevWord = SOL;
+		int prevVB = -1;
 		ArrayList<Integer> row = new ArrayList<Integer>();
-
+		ArrayList<Integer> rowSem = new ArrayList<Integer>();
+		
 		row = getNextWord(posTemplate , indexOfPT, bigrams, prevWord, POSTags, indexes);
-
+		
+		rowSem = getNextWordSemantic(posTemplate , indexOfPT, bigrams, prevWord, prevVB, POSTags, indexes, vbNNrelation);
+		
+		if(rowSem == null){			
+			return "unable to produce row for POS-template " + Arrays.toString(posTemplate);
+		}
+		System.out.println("Without semantics:");
 		for (int i = row.size(); i > 0; i--) {			
 			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
-		}			
-
+		}
+		System.out.println(sb);
+		
+		System.out.println("With semantics:");
+		sb = new StringBuilder();
+		for (int i = rowSem.size(); i > 0; i--) {			
+			sb.append(uniqueWordList[rowSem.get(i-1)].toString2()+" ");			
+		}
+		System.out.println(sb);
+		
 		return sb.toString();
 
 	}
