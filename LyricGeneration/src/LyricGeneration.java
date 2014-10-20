@@ -1,10 +1,6 @@
 import java.io.BufferedReader;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
-import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -16,8 +12,14 @@ import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 
 
 public class LyricGeneration {
-	final static String  corpusName = "resources/corpus";
+	final static String  corpusName = "resources/U2corpus";
 	private static final boolean debug = false;
+	private static final int nrDublicatedPosTemplates = 3;
+	private static final int NN = 12;
+	private static final int PDT = 15;
+	private static final int VB = 26;
+	private static final int WDT = 32;
+
 	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB","RS","RB"};
 	/**
 	 * @param args
@@ -41,41 +43,53 @@ public class LyricGeneration {
 			for (int i = 0; i < uniqueWordList.length; i++) {
 
 			System.out.println(i + " "+ uniqueWordList[i].word +" : " + uniqueWordList[i].POS );			
-		}
-		 */
+		}*/
+
 		int[] indexes = prepareIndexes(uniqueWordList, POSTags);
 
+		int verbsStart = indexes[Arrays.binarySearch(POSTags, "VB")];
+		int verbsEnd = indexes[Arrays.binarySearch(POSTags, "WDT")];
+		int nounStart = indexes[Arrays.binarySearch(POSTags, "NN")];
+		int nounEnd =  indexes[Arrays.binarySearch(POSTags, "PDT")];
+
+		boolean[][] vbNNrelation = readRelations(tagger, uniqueWordList,verbsStart, verbsEnd, nounStart, nounEnd);
+
+		//get start of line and end of line
 		int SOL = indexes[Arrays.binarySearch(POSTags, "SOL")];
 		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
 
 		// for bigrams:
 		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);		
-		String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+		//String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams, vbNNrelation);
 
 		//for trigrams:
 		//byte[][][] trigrams = calcTrigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
 		//String verserow = synthesizeRowTriGram(posTemplates, uniqueWordList, POSTags,indexes, SOL, trigrams);
 
-		System.out.println(verserow);
-		/*
+
+		System.out.println("number of postagged lines in corpus: " + posTaggedLines.size());
+		System.out.println("number of unique words in corpus: " + uniqueWordList.length);
+		System.out.println("number postagTemplates: " + posTemplates.size());
+		//System.out.println(verserow);
+
 		//for generating whole song:
 		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
 			System.out.println(verserow);
 		}
 		System.out.println("");
 		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
 			System.out.println(verserow);
 		}
 		System.out.println("");
 		for (int i = 0; i < 3; i++) {
-			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
 			System.out.println(verserow);
 		}
 		System.out.println("");
 		for (int i = 0; i < 4; i++) {
-			String verserow = synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams);
+			String verserow = synthesizeRowSemantic(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams, vbNNrelation);
 			System.out.println(verserow);
 		}
 		System.out.println("");
@@ -85,8 +99,125 @@ public class LyricGeneration {
 		}
 
 
-		 */
+
 		return;
+	}
+
+	private static String synthesizeRowSemantic(ArrayList<String> posTemplates,
+			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
+			double[][] bigrams, boolean[][] vbNNrelation) {
+		Random r = new Random();
+		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
+		if(debug)System.out.println(Arrays.toString(posTemplate));
+		StringBuilder sb = new StringBuilder();
+		int indexOfPT = 0;
+		int prevWord = SOL;
+		int prevVB = -1;
+		ArrayList<Integer> row = new ArrayList<Integer>();
+
+		row = getNextWordSemantic(posTemplate , indexOfPT, bigrams, prevWord, prevVB, POSTags, indexes, vbNNrelation);
+
+		//if no match against template (should not happen)
+		if(row == null){
+			synthesizeRow(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams);
+			return "";
+		}
+		
+		for (int i = row.size(); i > 0; i--) {			
+			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
+		}			
+
+		return sb.toString();
+
+	}
+
+
+	private static ArrayList<Integer> getNextWordSemantic(String[] posTemplate,	int indexOfPT, double[][] bigrams, int prevWord, int prevVB, String[] pOSTags, int[] indexes, boolean[][] vbNNrelation) {
+		if(indexOfPT == posTemplate.length){
+			return new ArrayList<Integer>();
+		}
+		int aPOSTagNr = Arrays.binarySearch(pOSTags, posTemplate[indexOfPT]);
+		int aMin = indexes[aPOSTagNr];
+		int aMax = indexes[aPOSTagNr != pOSTags.length-1 ? aPOSTagNr +1 : pOSTags.length-1];
+		WordProb[] flwWordProbs = new WordProb[aMax-aMin];
+		for (int i = aMin; i < aMax; i++) {
+			flwWordProbs[i-aMin] = new WordProb(bigrams[prevWord][i], i);
+		}
+		Arrays.sort(flwWordProbs);
+		for (int i = 0; i < flwWordProbs.length; i++) {			
+			if(flwWordProbs[i].prob == 0.0){
+				//if no chance of word - break (since array is sorted)
+				break;
+			}
+			if(debug)System.err.println("index of POStemplate = " + indexOfPT + " trying with word: "+flwWordProbs[i].index + " with prob: " + flwWordProbs[i].prob);
+
+			//if current postag is a verb, mark it.
+			if(aPOSTagNr >= VB && aPOSTagNr <= WDT){
+				prevVB = flwWordProbs[i].index;
+			}
+
+			//if current posTag is NN
+			if(aPOSTagNr >= NN && aPOSTagNr <= PDT){
+				//and if a previous verb is marked and they are not compatible - continue with loop.
+				if(prevVB > 0 && !vbNNrelation[prevVB][flwWordProbs[i].index]){
+					continue;						
+				}
+			}
+
+			ArrayList<Integer> nextWordindex = getNextWordSemantic(posTemplate, indexOfPT+1, bigrams, flwWordProbs[i].index, prevVB, pOSTags, indexes, vbNNrelation);
+			if(nextWordindex == null){
+				continue;
+			}else{
+				nextWordindex.add(flwWordProbs[i].index);
+				if(debug)System.err.println("index of POStemplate = " + indexOfPT + " words added: " + Arrays.toString(nextWordindex.toArray()));
+				return nextWordindex;
+			}
+		}
+		return null;
+	}
+
+	private static boolean[][] readRelations(MaxentTagger tagger, Word[] uniqueWordList, int vbStart, int vbEnd, int nnStart, int nnEnd) {
+		boolean[][] vbNNrelation = new boolean[uniqueWordList.length][uniqueWordList.length];
+		BufferedReader reader;
+		ArrayList<String> taggedLines = new ArrayList<String>();
+		String srcline;		 
+		try {
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream("resources/vn"), "ISO-8859-1"));
+			srcline = reader.readLine();
+			while(srcline != null){
+				if(srcline.length() != 0){
+					taggedLines.add(tagger.tagString(srcline));					
+				}
+				srcline = reader.readLine();
+			}
+			reader.close();
+			int nrOFrels = 0;
+			for (String taggedLine : taggedLines) {
+				String[] vbNN = taggedLine.split(" ");
+				int vbindex = binary_search(uniqueWordList, new Word(vbNN[0]), vbStart, vbEnd);
+				//if word is in corpus / uniqueWordList
+				if(vbindex > 0){
+					int nnindex = binary_search(uniqueWordList, new Word(vbNN[1]), nnStart, nnEnd);
+					//if noun is also in corpus / unique wordlist
+					if(nnindex > 0){
+						nrOFrels++;						
+						vbNNrelation[vbindex][nnindex] = true;						
+					}
+				}
+			}
+			System.err.println("number of relations in corpus: " + nrOFrels);
+
+
+			//int index = binary_search(uniqueWordList, new Word(), verbsStart, verbsEnd);
+
+
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+
+		return vbNNrelation;
 	}
 
 	private static byte[][][] calcTrigrams(ArrayList<String> posTaggedLines,
@@ -142,11 +273,6 @@ public class LyricGeneration {
 
 		row = getNextWord(posTemplate , indexOfPT, bigrams, prevWord, POSTags, indexes);
 
-		//if no match against template (should not happen)
-		if(row == null){
-			synthesizeRow(posTemplates, uniqueWordList, POSTags, indexes, SOL, bigrams);
-		}
-
 		for (int i = row.size(); i > 0; i--) {			
 			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
 		}			
@@ -168,7 +294,7 @@ public class LyricGeneration {
 		}
 		Arrays.sort(flwWordProbs);
 		for (int i = 0; i < flwWordProbs.length; i++) {
-			
+
 			if(flwWordProbs[i].prob == 0.0){
 				//if no chance of word - break (since array is sorted)
 				break;
@@ -387,7 +513,7 @@ public class LyricGeneration {
 		}
 		Set<String> keys = POSTemplateOccurances.keySet();
 		for (String key : keys) {
-			if(POSTemplateOccurances.get(key) > 2 ) posTemplates.add(key);
+			if(POSTemplateOccurances.get(key) > nrDublicatedPosTemplates ) posTemplates.add(key);
 		}
 		return posTemplates;
 	}
@@ -412,9 +538,11 @@ public class LyricGeneration {
 				}
 				srcline = reader.readLine();
 			}
+			reader.close();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+
 		return lines;
 	}
 
@@ -447,7 +575,10 @@ class Word implements Comparable<Word>{
 	String POS;
 	public Word(String word){
 		String[] tokens = word.split("_");
-		if(tokens.length != 2) throw new IllegalArgumentException();
+		if(tokens.length != 2){
+			System.err.println(Arrays.toString(tokens));
+			throw new IllegalArgumentException();
+		}
 		if(tokens[0].equals("'")){
 			System.err.println("found ' in corpus");
 		}
