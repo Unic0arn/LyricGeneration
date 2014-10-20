@@ -3,22 +3,25 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.Stack;
 
 import edu.stanford.nlp.tagger.maxent.MaxentTagger;
 
 
 public class LyricGeneration {
-	final static String  corpusName = "resources/corpus";
+	final static String  corpusName = "resources/U2corpus";
 	private static final boolean debug = false;
-	private static final int nrDublicatedPosTemplates = 6;
+	private static final int nrDublicatedPosTemplates = 2;
 	private static final int NN = 12;
 	private static final int PDT = 15;
 	private static final int VB = 26;
 	private static final int WDT = 32;
+	private static final String VNname = "resources/vn";
 
 	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB","RS","RB"};
 	/**
@@ -50,10 +53,8 @@ public class LyricGeneration {
 		int verbsStart = indexes[Arrays.binarySearch(POSTags, "VB")];
 		int verbsEnd = indexes[Arrays.binarySearch(POSTags, "WDT")];
 		int nounStart = indexes[Arrays.binarySearch(POSTags, "NN")];
-		int nounEnd =  indexes[Arrays.binarySearch(POSTags, "PDT")];
-
+		int nounEnd =  indexes[Arrays.binarySearch(POSTags, "PDT")];		
 		boolean[][] vbNNrelation = readRelations(tagger, uniqueWordList,verbsStart, verbsEnd, nounStart, nounEnd);
-
 		//get start of line and end of line
 		int SOL = indexes[Arrays.binarySearch(POSTags, "SOL")];
 		int EOL = indexes[Arrays.binarySearch(POSTags, "EOL")];
@@ -97,7 +98,8 @@ public class LyricGeneration {
 		
 		//should perhaps try to randomize forst word in a row
 		
-		for (int i = 0; i < flwWordProbs.length; i++) {	
+		for (int i = 0; i < flwWordProbs.length; i++) {
+			//if verb was previously cleared and backtracked, set it as prevVB again
 			lastVB = prevVB;
 			if(flwWordProbs[i].prob == 0.0){
 				//if no chance of word - break (since array is sorted)
@@ -112,8 +114,9 @@ public class LyricGeneration {
 
 			//if current posTag is NN
 			if(aPOSTagNr >= NN && aPOSTagNr < PDT){
-				//and if a previous verb is marked and they are not compatible - continue with loop.
+				//and if a previous verb is marked 
 				if(lastVB > 0){
+					//and they are not compatible - continue with loop.
 					if(!vbNNrelation[prevVB][flwWordProbs[i].index]){
 						continue;		
 				}
@@ -140,7 +143,7 @@ public class LyricGeneration {
 		ArrayList<String> taggedLines = new ArrayList<String>();
 		String srcline;		 
 		try {
-			reader = new BufferedReader(new InputStreamReader(new FileInputStream("resources/vn"), "ISO-8859-1"));
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream(VNname), "ISO-8859-1"));
 			srcline = reader.readLine();
 			while(srcline != null){
 				if(srcline.length() != 0){
@@ -222,7 +225,9 @@ public class LyricGeneration {
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
 			double[][] bigrams,boolean[][] vbNNrelation) {
 		Random r = new Random();
-		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");		
+		
+		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");			
+		
 		if(debug)System.out.println(Arrays.toString(posTemplate));
 		StringBuilder sb = new StringBuilder();
 		int indexOfPT = 0;
@@ -267,6 +272,10 @@ public class LyricGeneration {
 			flwWordProbs[i-aMin] = new WordProb(bigrams[prevWord][i], i);
 		}
 		Arrays.sort(flwWordProbs);
+		if(indexOfPT == 0){
+			flwWordProbs = randomOrder(flwWordProbs);
+		}
+		
 		for (int i = 0; i < flwWordProbs.length; i++) {
 
 			if(flwWordProbs[i].prob == 0.0){
@@ -285,6 +294,28 @@ public class LyricGeneration {
 		}
 		return null;
 	}
+	
+	
+	
+	private static WordProb[] randomOrder(WordProb[] flwWordProbs) {		
+		ArrayList<WordProb> temp = new ArrayList<WordProb>();
+		for(int i = 0; i<flwWordProbs.length; i++){
+			if(flwWordProbs[i].prob == 0){
+				break;
+			}
+			temp.add(flwWordProbs[i]);			
+		}		
+		Collections.shuffle(temp);
+		
+		WordProb[] flwWordProbsres = new WordProb[temp.size()];
+		for (int i = 0; i < flwWordProbsres.length; i++) {			
+			flwWordProbsres[i] = temp.get(i);
+		}
+		
+		return flwWordProbsres;
+	}
+	
+
 	private static String synthesizeRowTriGram(ArrayList<String> posTemplates,
 			Word[] uniqueWordList, String[] POSTags, int[] indexes, int SOL,
 			byte[][][] trigrams) {
