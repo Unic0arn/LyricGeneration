@@ -259,7 +259,8 @@ public class LyricGeneration {
 
 		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");			
 
-		if(debug)System.out.println(Arrays.toString(posTemplate));		
+		if(debug)System.out.println(Arrays.toString(posTemplate));
+		System.out.println(Arrays.toString(posTemplate));
 		StringBuilder sb = new StringBuilder();
 		int indexOfPT = 0;
 		int prevWord = SOL;
@@ -271,16 +272,20 @@ public class LyricGeneration {
 
 		rowSem = getNextWordSemantic(posTemplate , indexOfPT, bigrams, prevWord, prevVB, POSTags, indexes, vbNNrelation);
 
-		if(rowSem == null){			
-			return "unable to produce row for POS-template " + Arrays.toString(posTemplate);
-		}
+		
 		System.out.println("Without semantics:");
 		for (int i = row.size(); i > 0; i--) {			
 			sb.append(uniqueWordList[row.get(i-1)].toString2()+" ");			
 		}
 		System.out.println(sb);
-
+		
+		
 		System.out.println("With semantics:");
+		if(rowSem == null){			
+			System.err.println("unable to produce row for POS-template: " + Arrays.toString(posTemplate));
+			return null;
+		}
+		
 		sb = new StringBuilder();
 		for (int i = rowSem.size(); i > 0; i--) {			
 			sb.append(uniqueWordList[rowSem.get(i-1)].toString2()+" ");			
