@@ -30,10 +30,10 @@ public class LyricGeneration {
 	private static String  relDBfile = "resources/"+corpusType+"reldb";
 	private static final boolean debug = false;
 	private static final int nrDublicatedPosTemplates = 2;
-	private static final int NN = 12;
-	private static final int PDT = 15;
-	private static final int VB = 26;
-	private static final int WDT = 32;
+	private static int NN;
+	private static int NNend;
+	private static int VB;
+	private static int VBend;
 	private static final String VNname = "resources/vn";
 
 	//final static String[] POSTags = {"CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNS","NNP","NNPS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB","RS","RB"};
@@ -62,11 +62,17 @@ public class LyricGeneration {
 		}*/
 
 		int[] indexes = prepareIndexes(uniqueWordList, POSTags);
-
-		int verbsStart = indexes[Arrays.binarySearch(POSTags, "VB")];
-		int verbsEnd = indexes[Arrays.binarySearch(POSTags, "WDT")];
-		int nounStart = indexes[Arrays.binarySearch(POSTags, "NN")];
-		int nounEnd =  indexes[Arrays.binarySearch(POSTags, "PDT")];		
+		
+		//perhaps not the best sollution:
+		VB = Arrays.binarySearch(POSTags, "VB");
+		VBend = (Arrays.binarySearch(POSTags, "VBZ")+1);
+		NN = Arrays.binarySearch(POSTags, "NN");
+		NNend = (Arrays.binarySearch(POSTags, "PDT"));
+		
+		int verbsStart = indexes[VB];
+		int verbsEnd = indexes[VBend];
+		int nounStart = indexes[NN];
+		int nounEnd =  indexes[NNend];		
 		boolean[][] vbNNrelation = readRelations(tagger, uniqueWordList,verbsStart, verbsEnd, nounStart, nounEnd);		
 
 		//get start of line and end of line
@@ -83,9 +89,10 @@ public class LyricGeneration {
 
 		// for bigrams:
 		double[][] bigrams = calcBigrams(posTaggedLines, uniqueWordList, POSTags, indexes, SOL, EOL);
-		for (int i = 0; i < 5; i++) {
+		//for (int i = 0; i < 5; i++) {
 			synthesizeRow(posTemplates, uniqueWordList, POSTags,indexes, SOL, bigrams, vbNNrelation);
-		}
+			System.out.println("");
+		//}
 
 
 		//for trigrams:
@@ -111,24 +118,25 @@ public class LyricGeneration {
 		Arrays.sort(flwWordProbs);
 
 		if(indexOfPT == 0){
+			if(debug)System.err.println("with semantics:");
 			flwWordProbs = randomOrder(flwWordProbs);
 		}
 		for (int i = 0; i < flwWordProbs.length; i++) {
-			//if verb was previously cleared and backtracked, set it as prevVB again
+			//if verb was previously cleared and then backtracked, set it as prevVB again
 			lastVB = prevVB;
 			if(flwWordProbs[i].prob == 0.0){
 				//if no chance of word - break (since array is sorted)
 				break;
 			}
-			if(debug)System.err.println("index of POStemplate = " + indexOfPT + " trying with word: "+flwWordProbs[i].index + " with prob: " + flwWordProbs[i].prob);
+			if(debug)System.err.println("index of POStemplate = " + indexOfPT + " trying with word: "+flwWordProbs[i].index + " with prob: " + flwWordProbs[i].prob + " prevVB = " + prevVB);
 
 			//if current postag is a verb, mark it.
-			if(aPOSTagNr >= VB && aPOSTagNr < WDT){
-				prevVB = flwWordProbs[i].index;
+			if(aPOSTagNr >= VB && aPOSTagNr < VBend){
+				lastVB = flwWordProbs[i].index;
 			}
 
 			//if current posTag is NN
-			if(aPOSTagNr >= NN && aPOSTagNr < PDT){
+			if(aPOSTagNr >= NN && aPOSTagNr < NNend){
 				//and if a previous verb is marked 
 				if(lastVB > 0){
 					//and they are not compatible - continue with loop.
@@ -136,6 +144,7 @@ public class LyricGeneration {
 						continue;		
 					}
 					//it passed the check, set verb as cleared
+					if(debug)System.err.println(prevVB + " "+ flwWordProbs[i].index + " are related");
 					lastVB =-1;
 				}
 			}
@@ -250,8 +259,7 @@ public class LyricGeneration {
 
 		String[] posTemplate = posTemplates.get(r.nextInt(posTemplates.size())).split(" ");			
 
-		if(debug)System.out.println(Arrays.toString(posTemplate));
-		System.out.println(Arrays.toString(posTemplate));
+		if(debug)System.out.println(Arrays.toString(posTemplate));		
 		StringBuilder sb = new StringBuilder();
 		int indexOfPT = 0;
 		int prevWord = SOL;
@@ -296,6 +304,7 @@ public class LyricGeneration {
 		}
 		Arrays.sort(flwWordProbs);
 		if(indexOfPT == 0){
+			if(debug)System.err.println("With nothing:");
 			flwWordProbs = randomOrder(flwWordProbs);
 		}
 
@@ -428,7 +437,7 @@ public class LyricGeneration {
 
 			for (int j = 0; j < biGram.length; j++) {
 				biGram[i][j] = biGram[i][j] * rowSum;
-				if(debug && Double.isNaN(biGram[i][j])){
+				if(debug && i!=EOL && Double.isNaN(biGram[i][j])){
 					System.err.println("Nan found");
 				}
 			}
